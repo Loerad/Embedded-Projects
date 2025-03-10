@@ -29,6 +29,7 @@ bool ampm = false; //am is false
 void setup() {
   // put your setup code here, to run once:
   attachInterrupt(digitalPinToInterrupt(minutePin), ChangeMinute, RISING);
+  attachInterrupt(digitalPinToInterrupt(hourPin), ChangeHour, RISING);
   setTime(clock);
   Serial.begin(9600);
   pixels.begin();
@@ -44,13 +45,7 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  Serial.print(hourFormat12());
-  Serial.print(":");
-  Serial.print(minute());
-  Serial.print(":");
-  Serial.println(second());
   CheckSeconds();
-  Serial.println(isAM());
 } 
 
 void CheckSeconds()
@@ -81,6 +76,7 @@ void CheckMinutes()
   if (thisMinute == 0)
   {
     CheckHours();
+    ResetMinutes();
   }
   int ledNum = thisMinute / 5 + 16;
   pixels.setPixelColor(ledNum, COLOR);
@@ -89,14 +85,16 @@ void CheckMinutes()
 
 void CheckHours()
 {
-  for (int i = 16; i < 28; i++)
-  {
-    pixels.setPixelColor(i, OFFCOLOR);
-  }
-
   time_t thisHour = hourFormat12();
-  if (thisHour == 0)
+  int ledNum = thisHour;
+  if (thisHour == 12)
   {
+    for (int i = 0; i < 13; i++)
+    {
+      pixels.setPixelColor(i, OFFCOLOR);
+    }
+    ledNum = 0;
+
     if (isAM() == 1)
     {
       pixels.setPixelColor(14, COLOR);
@@ -105,23 +103,30 @@ void CheckHours()
     {
       pixels.setPixelColor(14, OFFCOLOR);
     }
-
-
-    for (int i = 0; i < 12; i++)
-    {
-      pixels.setPixelColor(i, OFFCOLOR);
-    }
-
-  }
-
-
-  pixels.setPixelColor(thisHour - 1, COLOR);
+  }  
+  
+  pixels.setPixelColor(ledNum, COLOR);
   pixels.show();
 } 
+
+void ResetMinutes()
+{
+  for (int i = 16; i < 28; i++) //resets minutes
+  {
+    pixels.setPixelColor(i, OFFCOLOR);
+  }
+}
 
 void ChangeMinute()
 {
   time_t newMinute = 300; //5 min
   adjustTime(newMinute);
   CheckMinutes();
+}
+
+void ChangeHour()
+{
+  time_t newHour = 3600; //1 hour
+  adjustTime(newHour);
+  CheckHours();
 }
