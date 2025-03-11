@@ -1,62 +1,52 @@
 #include <TimeLib.h>
 #include <Adafruit_NeoPixel.h>
 
-time_t clock = 0;
-
-//two arrays H and M that have the relevant LEDs for hours and minutes
-
-//one variable for am/pm state
-
-// one var for boiler on and off state
-
-//two methods that add an hour to the clock and one that adds 5 minutes to the clock
-
-
-#define NUM_LEDS 41
 #define LED_PIN 6
-Adafruit_NeoPixel pixels(NUM_LEDS, LED_PIN, NEO_GRB);
-#define COLOR pixels.Color(0,100,0)
-#define OFFCOLOR pixels.Color(0,0,0)
 #define hourPin 3
 #define minutePin 2
 
+#define NUM_LEDS 41 //led strip needs to be at least 32 LEDS long or the same as the MAXMINUTELED value
+Adafruit_NeoPixel pixels(NUM_LEDS, LED_PIN, NEO_GRB);
+#define COLOR pixels.Color(0,255,0)
+#define OFFCOLOR pixels.Color(0,0,0)
+#define AMCOLOR pixels.Color(255, 242, 0)
+#define PMCOLOR pixels.Color(55, 0, 255)
 
-
-bool ampm = false; //am is false
+#define SECONDLED 13
+#define MINMINUTELED 20
+#define MAXMINUTELED 32
+#define MINSUBMINLED 15
+#define MAXSUBMINLED 20
+#define MINHOURLED 0
+#define MAXHOURLED 12
 
 //bool boilerOff = false; // led off on start, at 12pm will turn the boiler off which for now will be the inbuilt light 
 
 void setup() {
   // put your setup code here, to run once:
-  attachInterrupt(digitalPinToInterrupt(minutePin), ChangeMinute, RISING);
-  attachInterrupt(digitalPinToInterrupt(hourPin), ChangeHour, RISING);
+  attachInterrupt(digitalPinToInterrupt(minutePin), ChangeMinute, FALLING);
+  attachInterrupt(digitalPinToInterrupt(hourPin), ChangeHour, FALLING);
+  time_t clock = 0; //the TimeLib uses time_t values for each method but doesn't have any way to tell if a int is a time_t so this is needed
   setTime(clock);
-  Serial.begin(9600);
+  Serial.begin(9600); //for debug
   pixels.begin();
-  if (isAM() == 1)
-  {
-    pixels.setPixelColor(14, COLOR);
-  }
-  else
-  {
-    pixels.setPixelColor(14, OFFCOLOR);
-  }
+  CheckAMPM();  //the clock always starts on AM, this just makes sure its on for the first loop of 12 hours
+  pixels.setBrightness(50);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  CheckSeconds();
+  CheckSecond();
 } 
 
-void CheckSeconds()
+void CheckSecond()
 {
   time_t thisSecond = second();
-  if (thisSecond == 0)
+  if (thisSecond == 0) //has the time gone from 59 to 60?
   {
-    CheckMinutes();
+    CheckSubMinute();
   }
-  int ledNum = 13;
-  if (thisSecond % 2 == 0)
+  int ledNum = SECONDLED;
+  if (thisSecond % 2 == 0) //blinks the second led for one second on then off
   {
     pixels.setPixelColor(ledNum, COLOR);
     pixels.show();
@@ -65,53 +55,71 @@ void CheckSeconds()
   {
     pixels.setPixelColor(ledNum, OFFCOLOR);
     pixels.show();
-
   }
-
 }
 
-void CheckMinutes()
+void CheckMinute()
 {
   time_t thisMinute = minute();
   if (thisMinute == 0)
   {
-    CheckHours();
-    ResetMinutes();
+    CheckHour();
+    Reset(MINMINUTELED, MAXMINUTELED);
   }
-  int ledNum = thisMinute / 5 + 16;
+  //the way these leds work is by dividing the values by the amount of minutes/hours.
+  //in this case, I divide 5 by the minute value then add the minimum starting LED so it appears in the strip where I want it.
+  //for example: time is 45, divide that by 5 equals 9, then plus that by the min start LED which is 20 we end up turning on led 29
+  int ledNum = thisMinute / 5 + MINMINUTELED;
+  if (ledNum == MINMINUTELED) { return; } //stops the first led from being on all the time not showing any relevant information
   pixels.setPixelColor(ledNum, COLOR);
   pixels.show();
 }
 
-void CheckHours()
+void CheckSubMinute()
+{
+  time_t thisSubMin = minute();
+  if (thisSubMin % 5 == 0) //has the time gone from the 4th minute to the 5th minute of any set of 5 minutes?
+  {
+    CheckMinute();
+    Reset(MINSUBMINLED, MAXSUBMINLED);
+  }
+  int ledNum = thisSubMin % 5 + MINSUBMINLED;
+  if (ledNum == MINSUBMINLED) {return;}
+  pixels.setPixelColor(ledNum, COLOR);
+  pixels.show();
+}
+
+void CheckHour()
 {
   time_t thisHour = hourFormat12();
   int ledNum = thisHour;
-  if (thisHour == 12)
+  if (thisHour == MAXHOURLED) //this is using 12 hour time 
   {
-    for (int i = 0; i < 13; i++)
-    {
-      pixels.setPixelColor(i, OFFCOLOR);
-    }
-    ledNum = 0;
+    Reset(MINHOURLED, MAXHOURLED); //call to reset hour leds
+    ledNum = MINHOURLED;
 
-    if (isAM() == 1)
-    {
-      pixels.setPixelColor(14, COLOR);
-    }
-    else
-    {
-      pixels.setPixelColor(14, OFFCOLOR);
-    }
+    CheckAMPM();
   }  
   
   pixels.setPixelColor(ledNum, COLOR);
   pixels.show();
 } 
 
-void ResetMinutes()
+void CheckAMPM()
 {
-  for (int i = 16; i < 28; i++) //resets minutes
+  if (isAM() == 1) //for some reason isAM returns an int instead of a boolean 
+  {
+    pixels.setPixelColor(14, AMCOLOR);
+  }
+  else
+  {
+    pixels.setPixelColor(14, PMCOLOR);
+  }
+}
+
+void Reset(int min, int max)
+{
+  for (int i = min; i < max; i++)
   {
     pixels.setPixelColor(i, OFFCOLOR);
   }
@@ -119,14 +127,14 @@ void ResetMinutes()
 
 void ChangeMinute()
 {
-  time_t newMinute = 300; //5 min
+  time_t newMinute = 60; //1 min
   adjustTime(newMinute);
-  CheckMinutes();
+  CheckSubMinute();
 }
 
 void ChangeHour()
 {
   time_t newHour = 3600; //1 hour
   adjustTime(newHour);
-  CheckHours();
+  CheckHour();
 }
