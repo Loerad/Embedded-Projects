@@ -1,6 +1,13 @@
 #include <TimeLib.h>
 #include <Adafruit_NeoPixel.h>
 
+/*
+  Requires:
+  2 buttons wired into at least 3.3v. The button you want for hours plugged into D/OUT 3, and minutes into D/OUT 2
+  A led strip with at least 32 LEDS wired into at least 3.3v into D/OUT pin 6
+  Powered by mains or 9v battery. Just make sure you have resistors at least 330
+*/
+
 #define LED_PIN 6
 #define hourPin 3
 #define minutePin 2
@@ -20,7 +27,7 @@ Adafruit_NeoPixel pixels(NUM_LEDS, LED_PIN, NEO_GRB);
 #define MINHOURLED 0
 #define MAXHOURLED 12
 
-//bool boilerOff = false; // led off on start, at 12pm will turn the boiler off which for now will be the inbuilt light 
+//bool boilerOff = false; // led off on start meaning the boiler should be on, at 12pm will turn the boiler off turning on the light
 
 void setup() {
   // put your setup code here, to run once:
