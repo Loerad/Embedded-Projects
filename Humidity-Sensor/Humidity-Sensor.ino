@@ -1,45 +1,121 @@
 // Example testing sketch for various DHT humidity/temperature sensors
 // Written by ladyada, public domain
 
-//https://www.circuitbasics.com/how-to-set-up-the-dht11-humidity-sensor-on-an-arduino/
-
+// https://www.circuitbasics.com/how-to-set-up-the-dht11-humidity-sensor-on-an-arduino/
 
 #include <DHT.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-#define DHTPIN 4     // Digital pin connected to the DHT sensor
+#define DHTPIN 4 // Digital pin connected to the DHT sensor
 
-#define DHTTYPE DHT11   // DHT 11
+#define DHTTYPE DHT11 // DHT 11
+#define RELAY 7
 
 DHT dht(DHTPIN, DHTTYPE);
 
-void setup() {
-  Serial.begin(9600);
+float h = 0.0;
+float t = 0.0;
 
+// https://projecthub.arduino.cc/arduino_uno_guy/i2c-liquid-crystal-displays-5eb615
+// initialize the liquid crystal library
+// the first parameter is  the I2C address
+// the second parameter is how many rows are on your screen
+// the  third parameter is how many columns are on your screen
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup()
+{
+  pinMode(RELAY, OUTPUT);
+  lcd.init();
+  lcd.backlight();
   dht.begin();
+  Serial.begin(9600);
 }
 
-void loop() {
+void loop()
+{
   // Wait a few seconds between measurements.
   delay(2000);
+  ReadData();
+}
 
+void ReadData()
+{
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  float h = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-  float t = dht.readTemperature();
-
+  h = dht.readHumidity();
+  t = dht.readTemperature();
   // Check if any reads failed and exit early (to try again).
-  if (isnan(h) || isnan(t)) {
-    Serial.println(F("Failed to read from DHT sensor!"));
+  if (isnan(h) || isnan(t))
+  {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Err read on sens");
+    Serial.println("Error:");
+    Serial.println("Unable to read sensor");
     return;
   }
 
-  Serial.print(F("Humidity: "));
-  Serial.print(h);
-  Serial.print(F("%  Temperature: "));
-  Serial.print(t);
-  Serial.println(F("°C "));
+  HandleData();
+}
 
+bool CheckFault(float reading, int cap)
+{
+  if (reading > cap)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+/// This method checks the conditions around the sensor and will react accordingly if so and will trigger the relay if a valid fault is true
+/// it will also print the information to the LCD screen as well as send the readings over the serial connection together every two seconds; humidity first, temperature second
+/// if a fault occurs, the serial information will send the reason for the fault in place of the humidity, followed by the humidity or temperature that the sensor is reading
+void HandleData()
+{
+  if (CheckFault(h, 70))
+  {
+    lcd.setCursor(0, 0);
+    lcd.print(F("Humidity: "));
+    lcd.print(h);
+    lcd.print("%");
+    lcd.setCursor(0, 1);
+    lcd.print("Too humid     "); // extra spaces are to overwrite the previous information still on the LCD screen
+    Serial.println("Breaker trip due to high humidity");
+    Serial.println(h);
+    digitalWrite(RELAY, HIGH);
+    return;
+  }
+
+  else if (CheckFault(t, 30))
+  {
+    lcd.setCursor(0, 0);
+    lcd.print(F("Temp: "));
+    lcd.print(t);
+    lcd.print(F("C"));
+    lcd.setCursor(0, 1);
+    lcd.print("Too hot        ");
+    Serial.println("Breaker trip due to high heat");
+    Serial.println(t);
+    digitalWrite(RELAY, HIGH);
+    return;
+  }
+  digitalWrite(RELAY, LOW);
+  // humidity
+  lcd.setCursor(0, 0);
+  lcd.print(F("Humidity: "));
+  lcd.print(h);
+  lcd.print("%");
+  // temp
+  lcd.setCursor(0, 1);
+  lcd.print(F("Temp: "));
+  lcd.print(t);
+  lcd.print(F("C"));
+
+  Serial.println(h);
+  Serial.println(t);
 }
