@@ -72,26 +72,49 @@ bool CheckFault(float reading, int cap)
   }
 }
 
-/// This method checks the conditions around the sensor and will react accordingly if so and will trigger the relay if a valid fault is true
-/// it will also print the information to the LCD screen as well as send the readings over the serial connection together every two seconds; humidity first, temperature second
-/// if a fault occurs, the serial information will send the reason for the fault in place of the humidity, followed by the humidity or temperature that the sensor is reading
-void HandleData()
+void SendData(bool err)
 {
-  if (CheckFault(h, 70))
+  if (err)
+  {
+    Serial.print(1);
+  }
+  else
+  {
+    Serial.print(0);
+  }
+  Serial.print(", ");
+  Serial.print(h);
+  Serial.print(", ");
+  Serial.println(t);
+}
+
+void DisplayDataToLCD()
+{
+  // humidity
+  lcd.setCursor(0, 0);
+  lcd.print(F("Humidity: "));
+  lcd.print(h);
+  lcd.print("%");
+  
+  // temp
+  lcd.setCursor(0, 1);
+  lcd.print(F("Temp: "));
+  lcd.print(t);
+  lcd.print(F("C"));
+}
+
+void DisplayErrorToLCD(bool humid)
+{
+  if (humid) //check if the error is humidity
   {
     lcd.setCursor(0, 0);
     lcd.print(F("Humidity: "));
     lcd.print(h);
     lcd.print("%");
     lcd.setCursor(0, 1);
-    lcd.print("Too humid     "); // extra spaces are to overwrite the previous information still on the LCD screen
-    Serial.println("Breaker trip due to high humidity");
-    Serial.println(h);
-    digitalWrite(RELAY, HIGH);
-    return;
+    lcd.print("Too humid      "); // extra spaces are to overwrite the previous information still on the LCD screen
   }
-
-  else if (CheckFault(t, 30))
+  else //assume its temp if not
   {
     lcd.setCursor(0, 0);
     lcd.print(F("Temp: "));
@@ -99,23 +122,32 @@ void HandleData()
     lcd.print(F("C"));
     lcd.setCursor(0, 1);
     lcd.print("Too hot        ");
-    Serial.println("Breaker trip due to high heat");
-    Serial.println(t);
+  }
+  SendData(true);
+}
+
+/// This method checks the conditions around the sensor and will react accordingly if so and will trigger the relay if a valid fault is true
+/// it will also print the information to the LCD screen as well as send the readings over the serial connection together every two seconds; humidity first, temperature second
+/// if a fault occurs, the serial information will send the reason for the fault in place of the humidity, followed by the humidity or temperature that the sensor is reading
+void HandleData()
+{
+  if (CheckFault(h, 70))
+  {
+    DisplayErrorToLCD(true);
     digitalWrite(RELAY, HIGH);
     return;
   }
-  digitalWrite(RELAY, LOW);
-  // humidity
-  lcd.setCursor(0, 0);
-  lcd.print(F("Humidity: "));
-  lcd.print(h);
-  lcd.print("%");
-  // temp
-  lcd.setCursor(0, 1);
-  lcd.print(F("Temp: "));
-  lcd.print(t);
-  lcd.print(F("C"));
 
-  Serial.println(h);
-  Serial.println(t);
+  else if (CheckFault(t, 30))
+  {
+    DisplayErrorToLCD(false);
+    digitalWrite(RELAY, HIGH);
+    return;
+  }
+
+  digitalWrite(RELAY, LOW);
+
+  DisplayDataToLCD();
+
+  SendData(false);
 }
