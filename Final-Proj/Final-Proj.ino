@@ -16,6 +16,8 @@ DHT dht(DHTPIN, DHTTYPE);
 
 float h = 0.0;
 float t = 0.0;
+float timer = 4;
+float const timerCap = 4;
 
 // https://projecthub.arduino.cc/arduino_uno_guy/i2c-liquid-crystal-displays-5eb615
 // initialize the liquid crystal library
@@ -23,7 +25,7 @@ float t = 0.0;
 // the second parameter is how many rows are on your screen
 // the  third parameter is how many columns are on your screen
 LiquidCrystal_I2C lcd(0x27, 16, 2);
- 
+
 void setup()
 {
   pinMode(RELAY, OUTPUT);
@@ -36,7 +38,7 @@ void setup()
 void loop()
 {
   // Wait a few seconds between measurements.
-  delay(2000);
+  timer = 
   ReadData();
 }
 
@@ -90,14 +92,17 @@ void SendData(bool err)
 
 void DisplayDataToLCD()
 {
+  if (timer >= (timerMax / 2))
+  {
+    lcd.setCursor(0, 0);
+    lcd.print(F("Humidity: "));
+    lcd.print(h);
+    lcd.print("%");
+  }
   // humidity
-  lcd.setCursor(0, 0);
-  lcd.print(F("Humidity: "));
-  lcd.print(h);
-  lcd.print("%");
-  
+  lcd.clear();
   // temp
-  lcd.setCursor(0, 1);
+  lcd.setCursor(0, 0);
   lcd.print(F("Temp: "));
   lcd.print(t);
   lcd.print(F("C"));
