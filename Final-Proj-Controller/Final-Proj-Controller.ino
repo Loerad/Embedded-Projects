@@ -6,18 +6,23 @@
 #include <DHT.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+#include <TimeLib.h>
 
 #define DHTPIN 4 // Digital pin connected to the DHT sensor
 
 #define DHTTYPE DHT11 // DHT 11
-#define RELAY 7
 
 DHT dht(DHTPIN, DHTTYPE);
 
 float h = 0.0;
 float t = 0.0;
-float timer = 4;
-float const timerCap = 4;
+unsigned long previousMillis = 0;  // will store last time LCD was updated
+unsigned long previousStateMillis = 0;  // will store last time LCD was updated
+const int interval = 2000;
+const int stateInterval = 6000;
+int pos = 0;    // variable to store the servo position
+bool state = false; //false will show humidity, true temperature;
 
 // https://projecthub.arduino.cc/arduino_uno_guy/i2c-liquid-crystal-displays-5eb615
 // initialize the liquid crystal library
@@ -25,21 +30,89 @@ float const timerCap = 4;
 // the second parameter is how many rows are on your screen
 // the  third parameter is how many columns are on your screen
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-
+Servo myservo;
+ 
 void setup()
 {
-  pinMode(RELAY, OUTPUT);
   lcd.init();
   lcd.backlight();
   dht.begin();
   Serial.begin(9600);
+  myservo.attach(9);
+  ReadData();
 }
 
 void loop()
 {
-  // Wait a few seconds between measurements.
-  timer = 
-  ReadData();
+  CheckTime();
+
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval) 
+  {
+    previousMillis = currentMillis;
+    ReadData();
+  }
+  if (currentMillis - previousStateMillis >= stateInterval)
+  {
+    previousStateMillis = currentMillis;
+    state = !state;
+  } 
+
+}
+
+void CheckTime()
+{
+  lcd.setCursor(4, 1);
+  lcd.print(hourFormat12());
+  lcd.print(F(":"));
+  if (minute() >= 0 && minute() <= 9)
+  {
+    lcd.print(F("0"));
+  }
+  lcd.print(minute());
+  lcd.print(F(":"));
+  if (second() >= 0 && second() <= 9)
+  {
+    lcd.print(F("0"));
+  }
+  lcd.print(second());
+  if (isAM() == 1)
+  {
+    lcd.print(F(" am"));
+  }
+  else
+  {
+    lcd.print(F(" pm"));
+  }
+}
+
+void ChangeMinute()
+{
+  time_t newMinute = 60; //1 min
+  adjustTime(newMinute);
+}
+
+void ChangeHour()
+{
+  time_t newHour = 3600; //1 hour
+  adjustTime(newHour);
+}
+
+void RunServo()
+{
+  for (pos = 0; pos <= 90; pos += 1) 
+  { 
+    myservo.write(pos);              
+    delay(15);                       
+  }
+  
+  for (pos = 90; pos >= 0; pos -= 1) 
+  { 
+    myservo.write(pos);            
+    delay(15);   
+  }                    
+  
 }
 
 void ReadData()
@@ -92,20 +165,23 @@ void SendData(bool err)
 
 void DisplayDataToLCD()
 {
-  if (timer >= (timerMax / 2))
+  if (!state)
   {
+    // humidity
     lcd.setCursor(0, 0);
-    lcd.print(F("Humidity: "));
+    lcd.print(F("Humi: "));
     lcd.print(h);
     lcd.print("%");
   }
-  // humidity
-  lcd.clear();
-  // temp
-  lcd.setCursor(0, 0);
-  lcd.print(F("Temp: "));
-  lcd.print(t);
-  lcd.print(F("C"));
+  else
+  {
+    // temp
+    lcd.setCursor(0, 0);
+    lcd.print(F("Temp: "));
+    lcd.print(t);
+    lcd.print(F("C"));
+  }
+
 }
 
 void DisplayErrorToLCD(bool humid)
