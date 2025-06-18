@@ -1,36 +1,33 @@
-// Example testing sketch for various DHT humidity/temperature sensors
-// Written by ladyada, public domain
-
-// https://www.circuitbasics.com/how-to-set-up-the-dht11-humidity-sensor-on-an-arduino/
-
 #include <DHT.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <Servo.h>
 #include <TimeLib.h>
 
+//pins
 #define DHTPIN 4 // Digital pin connected to the DHT sensor
 #define MINBUTTON 10
 #define HOURBUTTON 11
-
 #define DHTTYPE DHT11 // DHT 11
 
-DHT dht(DHTPIN, DHTTYPE);
+//timers
+#define interval 2000 //standard interval that reads data
+#define stateInterval 6000 //changes the state of the screen to show 
+#define buttonTimeout 500 //
+unsigned long previousMillis = 0;      
+unsigned long previousStateMillis = 0; 
 
+//data and position
 float h = 0.0;
 float t = 0.0;
-unsigned long previousMillis = 0;  // will store last time LCD was updated
-unsigned long previousStateMillis = 0;  // will store last time LCD was updated
-const int interval = 2000;
-const int stateInterval = 6000;
-const int buttonTimeout = 500;
-int pos = 30;    // variable to store the servo position
-bool state = false; //false will show humidity, true temperature;
+int pos = 30;  
+
+//states 
+bool state = false; // false will show humidity, true temperature;
 int minButtonState = 0;
 int hourButtonState = 0;
 int prevMinButtonState = HIGH;
 int prevHourButtonState = HIGH;
-bool servoDone = false;
 
 // https://projecthub.arduino.cc/arduino_uno_guy/i2c-liquid-crystal-displays-5eb615
 // initialize the liquid crystal library
@@ -38,18 +35,22 @@ bool servoDone = false;
 // the second parameter is how many rows are on your screen
 // the  third parameter is how many columns are on your screen
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-Servo myservo;
- 
+Servo servo;
+DHT dht(DHTPIN, DHTTYPE);
+
 void setup()
 {
   lcd.init();
   lcd.backlight();
+
   dht.begin();
+  servo.attach(9);
+
   pinMode(MINBUTTON, INPUT_PULLUP);
   pinMode(HOURBUTTON, INPUT_PULLUP);
   Serial.begin(9600);
-  myservo.attach(9);
-  ReadData();
+
+  ReadData(); //does a pre-read to make sure the LCD isn't blank on start
 }
 
 void loop()
@@ -59,19 +60,19 @@ void loop()
 
   unsigned long currentMillis = millis();
 
-  if (currentMillis - previousMillis >= interval) 
+  if (currentMillis - previousMillis >= interval) //DHT needs 2 seconds between reads
   {
     previousMillis = currentMillis;
     ReadData();
   }
-  if (currentMillis - previousStateMillis >= stateInterval)
+  if (currentMillis - previousStateMillis >= stateInterval) //switches between showing temp and humi every 6 seconds
   {
     previousStateMillis = currentMillis;
     state = !state;
-  } 
-
+  }
 }
 
+/// @brief Reads the state of the buttons and calls the needed method based on button pressed
 void CheckButtons()
 {
   minButtonState = digitalRead(MINBUTTON);
@@ -95,6 +96,7 @@ void CheckButtons()
   prevHourButtonState = hourButtonState;
 }
 
+/// @brief Checks the time and formats it for the LCD panel.
 void CheckTime()
 {
   lcd.setCursor(3, 1);
@@ -124,46 +126,49 @@ void CheckTime()
     lcd.print(F(" pm"));
   }
 
-
-    if ((hour() >= 21) || (hour() < 12))
-    {
-      ServoToOn();
-    }
-    else
-    {
-      ServoToOff();
-    }
-}
-
-void ChangeMinute()
-{
-  time_t newMinute = 60; //1 min
-  adjustTime(newMinute);
-}
-
-void ChangeHour()
-{
-  time_t newHour = 3600; //1 hour
-  adjustTime(newHour);
-}
-
-void ServoToOn()
-{
-  for (pos; pos <= 60; pos += 1) 
-  { 
-    myservo.write(pos);                                 
+  if ((hour() >= 21) || (hour() < 12))
+  {
+    ServoToOn();
+  }
+  else
+  {
+    ServoToOff();
   }
 }
 
-void ServoToOff()
+/// @brief Adjusts the time by 1 minute forward
+void ChangeMinute()
 {
-  for (pos; pos >= 30; pos -= 1) 
-  { 
-    myservo.write(pos);            
-  }    
-
+  time_t newMinute = 60; // 1 min
+  adjustTime(newMinute);
 }
 
+/// @brief Adjusts the time by 1 hour forward
+void ChangeHour()
+{
+  time_t newHour = 3600; // 1 hour
+  adjustTime(newHour);
+}
+
+/// @brief Moves the servo forward to turn the switch on
+void ServoToOn()
+{
+  for (pos; pos <= 60; pos += 1)
+  {
+    servo.write(pos);
+  }
+}
+
+/// @brief Moves the servo backwards to turn the switch off
+void ServoToOff()
+{
+  for (pos; pos >= 30; pos -= 1)
+  {
+    servo.write(pos);
+  }
+}
+
+/// @brief Reads the data in from the sensor and catches if the sensor is incorrectly connected
 void ReadData()
 {
   lcd.clear();
@@ -174,7 +179,6 @@ void ReadData()
   // Check if any reads failed and exit early (to try again).
   if (isnan(h) || isnan(t))
   {
-
     lcd.setCursor(0, 0);
     lcd.print("Err read on sens");
     Serial.println("Error:");
@@ -185,6 +189,10 @@ void ReadData()
   HandleData();
 }
 
+/// @brief Checks if the incoming reading is over the supplied cap
+/// @param reading the value given from the sensor
+/// @param cap the limit you want to cap the reading's accepted values
+/// @return true if the value is greater signaling a fault.
 bool CheckFault(float reading, int cap)
 {
   if (reading > cap)
@@ -197,6 +205,8 @@ bool CheckFault(float reading, int cap)
   }
 }
 
+/// @brief Sends the data over the serial connection to be picked up by an external listener
+/// @param err whether or not to send a fault is occuring
 void SendData(bool err)
 {
   if (err)
@@ -213,6 +223,7 @@ void SendData(bool err)
   Serial.println(t);
 }
 
+/// @brief Displays the received data to the LCD panel. Flips back and forth based on the state bool
 void DisplayDataToLCD()
 {
   if (!state)
@@ -231,32 +242,30 @@ void DisplayDataToLCD()
     lcd.print(t);
     lcd.print(F("C"));
   }
-
 }
 
+/// @brief Displays the received fault (error) to the LCD panel
+/// @param humid true if the fault is humidity, false for temperature
 void DisplayErrorToLCD(bool humid)
 {
-  if (humid) //check if the error is humidity
+  if (humid) // check if the error is humidity
   {
     lcd.setCursor(0, 0);
     lcd.print(F("ERR H: "));
     lcd.print(h);
     lcd.print("%");
   }
-  else //assume its temp if not
+  else // assume its temp if not
   {
     lcd.setCursor(0, 0);
     lcd.print(F("ERR T: "));
     lcd.print(t);
     lcd.print(F("C"));
-
   }
   SendData(true);
 }
 
-/// This method checks the conditions around the sensor and will react accordingly if so and will trigger the relay if a valid fault is true
-/// it will also print the information to the LCD screen as well as send the readings over the serial connection together every two seconds; humidity first, temperature second
-/// if a fault occurs, the serial information will send the reason for the fault in place of the humidity, followed by the humidity or temperature that the sensor is reading
+/// @brief Handles which data to be displayed
 void HandleData()
 {
   if (CheckFault(h, 70))
@@ -270,7 +279,6 @@ void HandleData()
     DisplayErrorToLCD(false);
     return;
   }
-
 
   DisplayDataToLCD();
 
