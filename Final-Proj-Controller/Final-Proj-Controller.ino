@@ -10,6 +10,8 @@
 #include <TimeLib.h>
 
 #define DHTPIN 4 // Digital pin connected to the DHT sensor
+#define MINBUTTON 10
+#define HOURBUTTON 11
 
 #define DHTTYPE DHT11 // DHT 11
 
@@ -21,8 +23,14 @@ unsigned long previousMillis = 0;  // will store last time LCD was updated
 unsigned long previousStateMillis = 0;  // will store last time LCD was updated
 const int interval = 2000;
 const int stateInterval = 6000;
-int pos = 0;    // variable to store the servo position
+const int buttonTimeout = 500;
+int pos = 30;    // variable to store the servo position
 bool state = false; //false will show humidity, true temperature;
+int minButtonState = 0;
+int hourButtonState = 0;
+int prevMinButtonState = HIGH;
+int prevHourButtonState = HIGH;
+bool servoDone = false;
 
 // https://projecthub.arduino.cc/arduino_uno_guy/i2c-liquid-crystal-displays-5eb615
 // initialize the liquid crystal library
@@ -37,6 +45,8 @@ void setup()
   lcd.init();
   lcd.backlight();
   dht.begin();
+  pinMode(MINBUTTON, INPUT_PULLUP);
+  pinMode(HOURBUTTON, INPUT_PULLUP);
   Serial.begin(9600);
   myservo.attach(9);
   ReadData();
@@ -45,6 +55,7 @@ void setup()
 void loop()
 {
   CheckTime();
+  CheckButtons();
 
   unsigned long currentMillis = millis();
 
@@ -61,9 +72,36 @@ void loop()
 
 }
 
+void CheckButtons()
+{
+  minButtonState = digitalRead(MINBUTTON);
+
+  if (minButtonState != prevMinButtonState)
+  {
+    if (minButtonState == LOW)
+    {
+      ChangeMinute();
+    }
+  }
+  hourButtonState = digitalRead(HOURBUTTON);
+  if (hourButtonState != prevHourButtonState)
+  {
+    if (hourButtonState == LOW)
+    {
+      ChangeHour();
+    }
+  }
+  prevMinButtonState = minButtonState;
+  prevHourButtonState = hourButtonState;
+}
+
 void CheckTime()
 {
-  lcd.setCursor(4, 1);
+  lcd.setCursor(3, 1);
+  if (hourFormat12() >= 0 && hourFormat12() <= 9)
+  {
+    lcd.print(F("0"));
+  }
   lcd.print(hourFormat12());
   lcd.print(F(":"));
   if (minute() >= 0 && minute() <= 9)
@@ -85,6 +123,18 @@ void CheckTime()
   {
     lcd.print(F(" pm"));
   }
+
+
+    if ((hour() >= 21) || (hour() < 12))
+    {
+      ServoToOn();
+    }
+    else
+    {
+      ServoToOff();
+    }
+  
+
 }
 
 void ChangeMinute()
@@ -99,24 +149,33 @@ void ChangeHour()
   adjustTime(newHour);
 }
 
-void RunServo()
+void ServoToOn()
 {
-  for (pos = 0; pos <= 90; pos += 1) 
+  for (pos; pos <= 60; pos += 1) 
   { 
-    myservo.write(pos);              
-    delay(15);                       
+    myservo.write(pos);                                 
   }
-  
-  for (pos = 90; pos >= 0; pos -= 1) 
+}
+
+void ServoToOff()
+{
+  for (pos; pos >= 30; pos -= 1) 
   { 
     myservo.write(pos);            
-    delay(15);   
-  }                    
+  }    
+
+}
+void RunServo()
+{
+
+  
+                
   
 }
 
 void ReadData()
 {
+  lcd.clear();
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
   h = dht.readHumidity();
@@ -124,7 +183,7 @@ void ReadData()
   // Check if any reads failed and exit early (to try again).
   if (isnan(h) || isnan(t))
   {
-    lcd.clear();
+
     lcd.setCursor(0, 0);
     lcd.print("Err read on sens");
     Serial.println("Error:");
@@ -189,20 +248,17 @@ void DisplayErrorToLCD(bool humid)
   if (humid) //check if the error is humidity
   {
     lcd.setCursor(0, 0);
-    lcd.print(F("Humidity: "));
+    lcd.print(F("ERR H: "));
     lcd.print(h);
     lcd.print("%");
-    lcd.setCursor(0, 1);
-    lcd.print("Too humid      "); // extra spaces are to overwrite the previous information still on the LCD screen
   }
   else //assume its temp if not
   {
     lcd.setCursor(0, 0);
-    lcd.print(F("Temp: "));
+    lcd.print(F("ERR T: "));
     lcd.print(t);
     lcd.print(F("C"));
-    lcd.setCursor(0, 1);
-    lcd.print("Too hot        ");
+
   }
   SendData(true);
 }
@@ -215,18 +271,15 @@ void HandleData()
   if (CheckFault(h, 70))
   {
     DisplayErrorToLCD(true);
-    digitalWrite(RELAY, HIGH);
     return;
   }
 
   else if (CheckFault(t, 30))
   {
     DisplayErrorToLCD(false);
-    digitalWrite(RELAY, HIGH);
     return;
   }
 
-  digitalWrite(RELAY, LOW);
 
   DisplayDataToLCD();
 
