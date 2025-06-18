@@ -133,8 +133,6 @@ void CheckTime()
     {
       ServoToOff();
     }
-  
-
 }
 
 void ChangeMinute()
@@ -164,13 +162,6 @@ void ServoToOff()
     myservo.write(pos);            
   }    
 
-}
-void RunServo()
-{
-
-  
-                
-  
 }
 
 void ReadData()
